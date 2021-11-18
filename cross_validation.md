@@ -149,3 +149,75 @@ rmse(wiggly_mod, test_df)
 ```
 
     ## [1] 0.289051
+
+## CV iteratively
+
+Use `modelr::crossv_mc`
+
+``` r
+cv_df = 
+  crossv_mc(nonlin_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+Lets fit some models
+
+``` r
+cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y~x, data = .x))
+  ) %>% 
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+    ## # A tibble: 100 x 5
+    ##    train             test              .id   linear_mod rmse_linear
+    ##    <list>            <list>            <chr> <list>           <dbl>
+    ##  1 <tibble [79 x 3]> <tibble [21 x 3]> 001   <lm>             0.675
+    ##  2 <tibble [79 x 3]> <tibble [21 x 3]> 002   <lm>             0.655
+    ##  3 <tibble [79 x 3]> <tibble [21 x 3]> 003   <lm>             0.785
+    ##  4 <tibble [79 x 3]> <tibble [21 x 3]> 004   <lm>             0.874
+    ##  5 <tibble [79 x 3]> <tibble [21 x 3]> 005   <lm>             0.784
+    ##  6 <tibble [79 x 3]> <tibble [21 x 3]> 006   <lm>             0.844
+    ##  7 <tibble [79 x 3]> <tibble [21 x 3]> 007   <lm>             0.791
+    ##  8 <tibble [79 x 3]> <tibble [21 x 3]> 008   <lm>             0.758
+    ##  9 <tibble [79 x 3]> <tibble [21 x 3]> 009   <lm>             0.621
+    ## 10 <tibble [79 x 3]> <tibble [21 x 3]> 010   <lm>             0.839
+    ## # ... with 90 more rows
+
+``` r
+cv_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y~x, data = .x)),
+    smooth_mod = map(.x = train, ~gam(y ~s(x), data = .x)),
+    wiggly_mod = map(.x = train, ~gam(y ~s(x, k = 30), sp = 10e-6, data = .x))
+  ) %>% 
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_wiggly = map2_dbl(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Look at output
+
+``` r
+cv_df %>% 
+  select(.id, starts_with("rmse")) %>% 
+  pivot_longer(
+    rmse_linear:rmse_wiggly,
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_boxplot()
+```
+
+<img src="cross_validation_files/figure-gfm/unnamed-chunk-10-1.png" width="90%" />
